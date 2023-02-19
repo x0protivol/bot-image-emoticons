@@ -1,0 +1,37 @@
+import Discord from 'discord.js';
+import AWS from 'aws-sdk';
+
+const dynamoDB = new AWS.DynamoDB.DocumentClient();
+const client = new Discord.Client();
+
+client.on('ready', () => {
+  console.log(`Logged in as ${client.user.tag}`);
+});
+
+client.on('message', async (message) => {
+  if (message.channel.type === 'text') {
+    const { guild, author, content } = message;
+    const { id: guildId } = guild;
+    const { id: userId } = author;
+
+    const params = {
+      TableName: 'discord_messages',
+      Item: {
+        id: `${guildId}_${message.id}`,
+        guildId,
+        userId,
+        content,
+        createdAt: Date.now()
+      }
+    };
+
+    try {
+      await dynamoDB.put(params).promise();
+      console.log('Message saved to DynamoDB:', params);
+    } catch (error) {
+      console.error('Error saving message to DynamoDB:', error);
+    }
+  }
+});
+
+client.login(process.env.DISCORD_BOT_TOKEN);
