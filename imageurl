@@ -1,0 +1,48 @@
+import { DynamoDB } from 'aws-sdk';
+import { APIGatewayProxyHandler } from 'aws-lambda';
+import axios from 'axios';
+
+const dynamoDB = new DynamoDB.DocumentClient();
+
+export const fetchDiscordProfileImages: APIGatewayProxyHandler = async (event, context) => {
+  try {
+    const { guild_id } = JSON.parse(event.body);
+
+    const response = await axios.get(`https://discord.com/api/guilds/${guild_id}/members`, {
+      headers: {
+        'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`
+      }
+    });
+
+    const memberIds = response.data.map((member) => member.user.id);
+
+    const avatarUrls = await Promise.all(memberIds.map(async (memberId) => {
+      const userResponse = await axios.get(`https://discord.com/api/users/${memberId}`, {
+        headers: {
+          'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`
+        }
+      });
+      return userResponse.data.avatar && `https://cdn.discordapp.com/avatars/${memberId}/${userResponse.data.avatar}.png`;
+    }));
+
+    await Promise.all(memberIds.map(async (memberId, index) => {
+      await dynamoDB.update({
+        TableName: 'discord_members',
+        Key: { id: memberId },
+        UpdateExpression: 'set #imageUrl = :imageUrl',
+        ExpressionAttributeNames: { '#imageUrl': 'image URL' },
+        ExpressionAttributeValues: { ':imageUrl': avatarUrls[index] }
+      }).promise();
+    }));
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: 'Successfully updated image URLs' })
+    };
+  } catch (error) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ message: error.message })
+    };
+  }
+};
