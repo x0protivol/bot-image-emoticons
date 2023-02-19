@@ -1,0 +1,27 @@
+import { Client, Guild, GuildEmoji } from "discord.js";
+import AWS from "aws-sdk";
+
+const client = new Client();
+const dynamoDB = new AWS.DynamoDB.DocumentClient();
+
+client.on("ready", async () => {
+  const guilds: Guild[] = client.guilds.cache.array();
+
+  for (const guild of guilds) {
+    const emoticons: GuildEmoji[] = guild.emojis.cache.array();
+
+    for (const emoji of emoticons) {
+      const params = {
+        TableName: "discord_emoticons",
+        Item: {
+          guild_id: guild.id,
+          name: emoji.name,
+          url: emoji.url,
+        },
+      };
+      await dynamoDB.put(params).promise();
+    }
+  }
+});
+
+client.login("discord_token");
